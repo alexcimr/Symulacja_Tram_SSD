@@ -40,7 +40,7 @@ def timetable(day):
     times = read("stop_times.txt", usecols=COLUMNS)
     times = times[times.trip_id.isin(trips.trip_id)]
     times = times.merge(read("stops.txt"), on="stop_id").merge(
-        trips[["trip_id", "route_short_name"]], on="trip_id"
+        trips[["trip_id", "route_short_name", "shape_id"]], on="trip_id"
     )
     times["arrival"] = to_seconds(times.arrival_time)
     times["departure"] = to_seconds(times.departure_time)

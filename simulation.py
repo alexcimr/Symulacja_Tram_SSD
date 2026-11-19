@@ -2,6 +2,8 @@ import heapq
 from dataclasses import dataclass
 from itertools import count
 
+from geometry import build_path, match_stops
+
 
 @dataclass
 class Tram:
@@ -12,6 +14,8 @@ class Tram:
     status: str = "waiting"
     departure: float = 0
     arrival: float = 0
+    path: object = None
+    progress: list = None
 
     def position(self, now):
         current = self.stops[self.index]
@@ -20,6 +24,11 @@ class Tram:
             total = self.arrival - self.departure
             ratio = (now - self.departure) / total if total > 0 else 1
             ratio = max(0, min(1, ratio))
+            if self.path is not None and self.progress is not None:
+                start = self.progress[self.index]
+                end = self.progress[self.index + 1]
+                if end > start:
+                    return self.path.at(start + ratio * (end - start))
             lon = current["lon"] + ratio * (following["lon"] - current["lon"])
             lat = current["lat"] + ratio * (following["lat"] - current["lat"])
             return lon, lat
@@ -27,12 +36,23 @@ class Tram:
 
 
 class Simulation:
-    def __init__(self, timetable):
+    def __init__(self, timetable, shapes=None, min_stop_seconds=15):
+        self.min_stop_seconds = max(0, int(min_stop_seconds))
         self.now = 0
         self.trams = {}
         self.events = []
         self.counter = count()
         self.log = []
+        self.geometry_ok = 0
+        self.geometry_fallback = 0
+        paths = {}
+        if shapes is not None:
+            for shape_id, group in shapes.sort_values("shape_pt_sequence").groupby("shape_id"):
+                points = list(zip(group.shape_pt_lon.astype(float), group.shape_pt_lat.astype(float)))
+                path = build_path(points)
+                if path is not None:
+                    paths[str(shape_id)] = path
+        matched = {}
 
         for trip_id, group in timetable.groupby("trip_id", sort=False):
             stops = [
@@ -48,6 +68,19 @@ class Simulation:
             if len(stops) < 2:
                 continue
             tram = Tram(str(trip_id), str(group.iloc[0].route_short_name), stops)
+            if "shape_id" in group:
+                shape_id = str(group.iloc[0].shape_id)
+                path = paths.get(shape_id)
+                if path is not None:
+                    key = (shape_id, tuple(s["id"] for s in stops))
+                    if key not in matched:
+                        matched[key] = match_stops(path, stops)
+                    if matched[key] is not None:
+                        tram.path = path
+                        tram.progress = matched[key]
+                        self.geometry_ok += 1
+            if tram.path is None:
+                self.geometry_fallback += 1
             self.trams[tram.trip_id] = tram
             self.schedule(stops[0]["departure"], "departure", tram.trip_id)
 
@@ -87,7 +120,7 @@ class Simulation:
             tram.status = "finished"
         else:
             tram.status = "stopped"
-            self.schedule(max(self.now, current["departure"]), "departure", tram.trip_id)
+            self.schedule(max(self.now + self.min_stop_seconds, current["departure"]), "departure", tram.trip_id)
 
     def visible(self):
         return [tram for tram in self.trams.values() if tram.status in ("moving", "stopped")]

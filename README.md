@@ -1,5 +1,13 @@
 # Symulacja krakowskiej sieci tramwajowej – checkpoint 2
 
+## Najprostsze wyjasnienie dla prezentujacych
+
+**Checkpoint 1:** wybieralismy godzine i otrzymywalismy jedna mape z przyblizonymi polozeniami tramwajow. Polozenia liczono po prostej miedzy przystankami.
+
+**Checkpoint 2:** uruchamiamy zegar symulacji. Dla kazdego kursu pamietamy, czy czeka, jedzie, stoi na przystanku czy zakonczyl kurs. Rozklad GTFS okresla, kiedy nastapi odjazd i przyjazd. Zdarzenia sa uporzadkowane w kolejce wedlug godziny. Animacja pokazuje obliczona pozycje pomiedzy zdarzeniami. Tam, gdzie dopasowanie sie udaje, punkt jedzie po zakretach z `shapes.txt`, a w pozostalych przypadkach po prostej.
+
+**DES:** to nie jest losowanie i nie musi oznaczac awarii. To sposob prowadzenia symulacji: system zmienia stan w konkretnych momentach (np. odjazd lub przyjazd), zamiast wykonywac cala logike co sekunde. Zdarzenia sa teraz w pelni wyznaczane przez rozklad; losowosc bedzie w checkpoint 3.
+
 ## 1. Co robimy w projekcie?
 
 Chcemy zasymulowac ruch tramwajow w Krakowie na podstawie prawdziwych rozkladow jazdy ZTP. Docelowo dojdą opoznienia, blokady torowisk i liczba pasazerow w tramwajach.
@@ -18,8 +26,8 @@ Na **checkpoint 2** dodalismy **uplyw czasu i zdarzenia**. Program potrafi przej
 - Tramwaj ma stany `waiting`, `moving`, `stopped`, `finished`.
 - Podczas postoju tramwaj **nie znika z mapy**.
 - Tramwaje poruszaja sie na mapie w animacji Matplotlib.
+- Pozycje podczas jazdy sa wyliczane **wzdluz geometrii z `shapes.txt`**, z zachowaniem zakretow (jesli uda sie dopasowac trase).
 - Jest licznik jadacych i stojacych pojazdow oraz opcjonalny zapis zdarzen do CSV.
-- Dodalismy proste testy zachowania symulacji.
 
 W odroznieniu od checkpointu 1 tramwaje maja teraz historie stanu, a godziny przyjazdu i odjazdu sa **zdarzeniami**, ktore zmieniaja ten stan.
 
@@ -86,9 +94,9 @@ Wyswietlanie wykresu wymaga srodowiska z obsluga okien (np. lokalny komputer z P
 |---|---|
 | `gtfs.py` | Pobranie paczki GTFS, wczytanie danych i przygotowanie tabeli rozkladu |
 | `simulation.py` | Tramwaje, kolejka zdarzen i zegar symulacji – nowy plik |
+| `geometry.py` | Dopasowywanie przystankow do torowiska oraz pozycja na zakretach |
 | `main.py` | Argumenty, rysowanie tras i animacja – rozbudowany plik |
 | `requirements.txt` | Biblioteki do instalacji |
-| `tests/test_simulation.py` | Proste testy symulacji |
 | `data/GTFS_KRK_T.zip` | Pobierane dane ZTP – nie dodajemy do repozytorium |
 
 ### Funkcje z `gtfs.py`
@@ -107,7 +115,7 @@ Wyswietlanie wykresu wymaga srodowiska z obsluga okien (np. lokalny komputer z P
 | `trips.txt` | Konkretne kursy, powiazania z linia i trasa | Tak |
 | `stop_times.txt` | Kolejne przystanki kursu oraz przyjazdy i odjazdy | Tak |
 | `stops.txt` | Przystanki, identyfikatory i wspolrzedne | Tak |
-| `shapes.txt` | Punkty geometrii tras | Tak – do rysowania |
+| `shapes.txt` | Punkty geometrii tras | Tak – do rysowania i pozycjonowania tramwajow |
 | `calendar_dates.txt` | Daty dodania/wyjatkow uslug | Tak |
 | `calendar.txt` | Regularny tygodniowy kalendarz kursowania | Nie w obecnym kodzie |
 | `agency.txt` | Dane organizatora/operatora | Nie |
@@ -134,14 +142,14 @@ Kazdy obiekt przechowuje:
 - `status` – `waiting`, `moving`, `stopped` albo `finished`.
 - `departure` i `arrival` – poczatek i koniec aktualnego przejazdu.
 
-Metoda `position(now)` liczy polozenie podczas jazdy wedlug wzoru ze starej wersji:
+Metoda `position(now)` liczy, jaka czesc czasu przejazdu minela. Jesli kurs ma dopasowana geometrie `shapes.txt`, tramwaj przemieszcza sie **po kolejnych punktach trasy**, a nie po prostej. Jesli nie ma dopasowania, uzywany jest stary wzor:
 
 ```text
 ratio = (obecny_czas - odjazd) / (przyjazd - odjazd)
 pozycja = A + ratio * (B - A)
 ```
 
-Osobno obliczamy `lat` i `lon`. Gdy tramwaj stoi, zwracamy pozycje przystanku.
+Osobno obliczamy `lat` i `lon` tylko w trybie awaryjnym. Gdy tramwaj stoi, zwracamy pozycje przystanku.
 
 ### `Simulation`
 
@@ -198,11 +206,36 @@ W Krakowie moze byc duzo pojazdow. Domyslnie pokazujemy numer przy maksymalnie 5
 
 Dodano `response.raise_for_status()`, dzieki czemu blad HTTP powoduje wyrazny wyjatek zamiast zapisania niepoprawnego pliku jako ZIP. Nadal warto pozniej dodac obsluge uszkodzonego archiwum.
 
-## 7. Co jeszcze NIE jest zrobione?
+## 7. Ruch po torowisku – `geometry.py`
+
+W starym kodzie pozycja byla liczona na prostej miedzy przystankami A i B. Teraz uzywamy rzeczywistej geometrii trasy zapisanej w `shapes.txt`.
+
+Jak to dziala:
+
+1. `timetable()` dolacza do kazdego kursu `shape_id` z `trips.txt`.
+2. `Simulation()` odczytuje punkty tej trasy, uporzadkowane po `shape_pt_sequence`.
+3. `build_path()` oblicza przyblizone odleglosci wzdluz kolejnych punktow trasy (w metrach).
+4. `match_stops()` szuka miejsc na tej trasie najblizszych kolejnym przystankom kursu, idac tylko do przodu.
+5. `Tram.position()` oblicza udzial uplywu czasu przejazdu i przesuwa tramwaj o taki sam udzial **dlugosci torowiska**, a nie odleglosci w linii prostej.
+6. `ShapePath.at()` zwraca wspolrzedne na odpowiednim fragmencie trasy.
+
+Przyklad: tramwaj jedzie A -> zakret -> B przez 10 minut. Po 5 minutach wskaznik jest w polowie **dlugosci drogi po torach**, a nie w polowie prostej A–B.
+
+Dopasowanie jest przyblizone. Jezeli ktorys przystanek jest oddalony od trasy o ponad 200 metrow lub brakuje jej geometrii, caly taki kurs uzywa starej interpolacji liniowej. Informacja jest wypisywana przy starcie:
+
+```text
+Trasy GTFS: 100, po prostej (awaryjnie): 2
+```
+
+To **przykladowe liczby**, nie wynik sprawdzenia aktualnych danych Krakowa. Warto sprawdzic, czy liczba kursow awaryjnych nie jest duza, a na mapie zweryfikowac petle i kursy specjalne.
+
+## 8. Co jeszcze NIE jest zrobione?
 
 - **Brak opoznien i awarii** – przejazdy odbywaja sie zgodnie z GTFS.
 - **Brak pasazerow i napelnienia** – dojdzie pozniej.
-- **Pozycja po prostej** – tramwaj moze na zakrecie byc poza torowiskiem, chociaz same linie rysowane sa z `shapes.txt`.
+- **Nie kazda trasa musi sie dopasowac** – dla brakujacych lub zbyt odleglych `shape_id` pozycja liczona jest po prostej. W terminalu pokazujemy liczbe takich kursow.
+- **Nie znamy rzeczywistej predkosci** – zakladamy rowny postep wzdluz odcinka torowiska miedzy przystankami.
+- **Zlozone petle i nietypowe przebiegi** – proste dopasowanie kolejnych przystankow moze sie mylic na trasach z petlami; wymaga to weryfikacji na realnej paczce GTFS.
 - **Brak dzielenia fizycznego taboru** – na razie kazdy `trip_id` jest osobnym obiektem. Jeden fizyczny tramwaj moze w rzeczywistosci obslugiwac kilka kursow.
 - **Brak wspolnego grafu torowisk** – nie ma jeszcze ograniczen zajetosci torow, sygnalizacji ani kolizji.
 - **Kursy nocne** – godziny powyzej 24 sa czytane, ale symulacja wybranej daty nie dolacza automatycznie kursow poprzedniego dnia.
@@ -212,34 +245,16 @@ Dodano `response.raise_for_status()`, dzieki czemu blad HTTP powoduje wyrazny wy
 
 Nie udajemy, ze system umie te rzeczy. To bedzie robione w nastepnych etapach.
 
-## 8. Testowanie
-
-Przy zainstalowanym `pytest`:
-
-```bash
-python -m pytest -q tests
-```
-
-Sprawdzamy:
-
-- Czy tramwaj odjezdza, przyjezdza, stoi i konczy kurs.
-- Czy pozycja w polowie przejazdu jest prawidlowa.
-- Czy nie mozna cofnac zegara.
-- Czy ponowne wywolanie tego samego czasu nie wykonuje zdarzen drugi raz.
-
-Testy wykorzystuja mala wymyslona trase, nie pobieraja danych ZTP.
-
 ## 9. Co pokazac na checkpoint 2?
 
 Demonstracja na 2–3 minuty:
 
-1. Otwieramy repo i pokazujemy nowy plik `simulation.py`.
-2. Wyjasniamy, ze kazdy kurs ma obiekt `Tram` oraz stan.
-3. Pokazujemy `schedule()` i `advance_to()` – najprostszy opis DES.
-4. Uruchamiamy animacje na prawdziwym GTFS i patrzymy, jak zmienia sie godzina.
-5. Zwracamy uwage na czerwone tramwaje w ruchu i pomaranczowe na postojach.
-6. Pokazujemy `--no-animation --log results/events.csv` i kilka wierszy z CSV.
-7. Mowimy, co bedziemy robic w checkpoint 3.
+1. Przypominamy, ze na checkpoint 1 pokazywalismy tramwaje tylko dla jednej godziny.
+2. Wyjasniamy DES: zegar i kolejne zdarzenia odjazdu i przyjazdu zmieniaja stan kazdego kursu.
+3. Uruchamiamy animacje na GTFS i pokazujemy ruch w czasie.
+4. Zwracamy uwage na ruch po zakretach `shapes.txt` oraz postoj na przystankach.
+5. Mowimy, ze nadal jest to ruch zgodny z rozkladem, bez GPS i losowych opoznien.
+6. Zapowiadamy awarie i blokady na checkpoint 3.
 
 Propozycja wypowiedzi:
 
@@ -273,5 +288,24 @@ Publikacje beda **podstawa do uzasadnienia modeli**, ale parametry nie zostaly j
 - **`heapq`** – wbudowana kolejka, ktora wybiera najwczesniejsze zdarzenie.
 - **`Tram`** – obiekt przechowujacy informacje i stan kursu.
 - **`FuncAnimation`** – odswieza mape, ale nie steruje logika przejazdow.
-- **Interpolacja liniowa** – przyblizona pozycja miedzy przystankami.
+- **Interpolacja po trasie** – w zwyklym przypadku pozycja lezy na geometrii `shapes.txt`; po prostej tylko gdy nie da sie dopasowac trasy.
 - **Checkpoint 3** – opoznienia i blokady torowiska.
+
+
+## Poprawka postojów na przystankach
+
+W pierwotnej wersji checkpointu 2 stan `stopped` mógł trwać zero sekund, jeżeli godzina przyjazdu i odjazdu w GTFS była taka sama. W nowej wersji każdy **pośredni** przystanek wymaga minimum 15 sekund postoju. To **nasze założenie**, a nie rzeczywisty pomiar ani informacja z GTFS.
+
+Uruchomienie z domyślnym postojem:
+
+```bash
+python main.py 08:00 2026-11-20
+```
+
+Aby lepiej zobaczyć pomarańczowe tramwaje, można zmniejszyć krok animacji do 5 sekund:
+
+```bash
+python main.py 08:00 2026-11-20 --step 5 --stop-time 20
+```
+
+`--stop-time 20` wymusza minimum 20 sekund postoju. `--step 5` pokazuje kolejną klatkę co 5 sekund czasu symulacji. Dłuższy postój może przesunąć kolejne przyjazdy i odjazdy względem GTFS. To zachowanie jest celowe, żeby symulacja uwzględniała rzeczywisty upływ czasu i propagację opóźnienia, ale nie należy go przedstawiać jako odwzorowania rzeczywistych postojów ZTP. Przystanek końcowy kończy kurs i nie ma stanu `stopped`.

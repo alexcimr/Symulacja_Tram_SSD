@@ -58,14 +58,15 @@ def main():
     parser.add_argument("clock", nargs="?", default="08:00")
     parser.add_argument("day", nargs="?", default=date.today().isoformat())
     parser.add_argument("--duration", type=int, default=60, help="Czas symulacji w minutach")
+    parser.add_argument("--stop-time", type=int, default=15, help="Minimalny postoj na przystanku w sekundach (domyslnie 15)")
     parser.add_argument("--step", type=int, default=30, help="Sekundy symulacji na klatke")
     parser.add_argument("--interval", type=int, default=100, help="Milisekundy miedzy klatkami")
     parser.add_argument("--no-animation", action="store_true", help="Uruchom bez okna wykresu")
     parser.add_argument("--log", default="", help="Zapisz zdarzenia do CSV")
     parser.add_argument("--labels", type=int, default=50, help="Maksymalna liczba numerow linii na mapie (0 = brak)")
     args = parser.parse_args()
-    if args.duration <= 0 or args.step <= 0 or args.interval <= 0:
-        parser.error("duration, step i interval musza byc dodatnie")
+    if args.duration <= 0 or args.step <= 0 or args.interval <= 0 or args.stop_time < 0:
+        parser.error("duration, step i interval musza byc dodatnie, stop-time nie moze byc ujemne")
 
     start = seconds(args.clock)
     end = start + args.duration * 60
@@ -73,7 +74,9 @@ def main():
     times = timetable(day)
     if times.empty:
         raise SystemExit("Brak kursow w GTFS dla podanej daty. Sprawdz zakres dat pliku ZIP.")
-    sim = Simulation(times)
+    shapes = read("shapes.txt")
+    sim = Simulation(times, shapes, min_stop_seconds=args.stop_time)
+    print(f"Trasy GTFS: {sim.geometry_ok}, po prostej (awaryjnie): {sim.geometry_fallback}")
     sim.advance_to(start)
 
     if args.no_animation:
