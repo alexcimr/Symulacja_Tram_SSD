@@ -12,7 +12,9 @@ COLUMNS = ["trip_id", "arrival_time", "departure_time", "stop_id", "stop_sequenc
 def download():
     if not PATH.exists():
         PATH.parent.mkdir(exist_ok=True)
-        PATH.write_bytes(requests.get(URL, timeout=60).content)
+        response = requests.get(URL, timeout=60)
+        response.raise_for_status()
+        PATH.write_bytes(response.content)
     return PATH
 
 
@@ -37,7 +39,9 @@ def timetable(day):
     trips = trips[trips.service_id.isin(services(day))]
     times = read("stop_times.txt", usecols=COLUMNS)
     times = times[times.trip_id.isin(trips.trip_id)]
-    times = times.merge(read("stops.txt"), on="stop_id").merge(trips[["trip_id", "route_short_name"]], on="trip_id")
+    times = times.merge(read("stops.txt"), on="stop_id").merge(
+        trips[["trip_id", "route_short_name"]], on="trip_id"
+    )
     times["arrival"] = to_seconds(times.arrival_time)
     times["departure"] = to_seconds(times.departure_time)
     return times.sort_values(["trip_id", "stop_sequence"]).reset_index(drop=True)
