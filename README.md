@@ -64,6 +64,3 @@ python main.py 08:00 2026-11-20 --no-animation --log results/events.csv
 
 Chcemy dodać losowe opóźnienia i blokady odcinków torowiska. Tramwaj, który trafi na blokadę, powinien poczekać, a powstałe opóźnienie ma przechodzić na kolejne przystanki. Potem porównamy działanie sieci bez blokady i z blokadą.
 
-## Krótkie podsumowanie do powiedzenia
-
-> W pierwszym etapie mieliśmy statyczną mapę tramwajów dla wybranej godziny. Teraz dodaliśmy zegar symulacji i zdarzenia odjazdu oraz przyjazdu. Tramwaje mają własne stany, zatrzymują się na przystankach i w większości przypadków poruszają się po trasach z GTFS zamiast po prostej. Nadal są to przejazdy według rozkładu. Na następnym checkpointcie chcemy sprawdzić, jak losowe opóźnienia i blokady wpłyną na ruch.
