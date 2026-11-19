@@ -15,7 +15,7 @@ Nowe rzeczy w checkpointcie 2:
 
 Program ma zegar i listę zdarzeń ułożonych od najwcześniejszego. Przykład: 08:00 – odjazd, 08:04 – przyjazd, 08:05 – kolejny odjazd. Przy każdym zdarzeniu zmienia się stan danego kursu. Animacja pokazuje, gdzie powinien być tramwaj między tymi zdarzeniami.
 
-Zrobiliśmy to przy pomocy `heapq`, czyli kolejki dostępnej w Pythonie. Nie korzystamy z SimPy. Nie ma jeszcze losowych awarii ani opóźnień – na razie ruch wynika z rozkładu.
+Zrobiliśmy to przy pomocy `heapq`, czyli kolejki dostępnej w Pythonie.
 
 ## Z czego korzystamy?
 
