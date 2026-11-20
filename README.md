@@ -11,7 +11,7 @@ Nowe rzeczy w checkpointcie 2:
 - Tramwaje zatrzymują się na przystankach. Przyjęliśmy minimalny postój **15 sekund**, ponieważ w GTFS godzina przyjazdu i odjazdu bywa taka sama.
 - Na mapie widać jadące i stojące tramwaje oraz ich liczbę. Zdarzenia można też zapisać do CSV.
 
-## Na czym polega DES?
+## DES
 
 Program ma zegar i listę zdarzeń ułożonych od najwcześniejszego. Przykład: 08:00 – odjazd, 08:04 – przyjazd, 08:05 – kolejny odjazd. Przy każdym zdarzeniu zmienia się stan danego kursu. Animacja pokazuje, gdzie powinien być tramwaj między tymi zdarzeniami.
 
