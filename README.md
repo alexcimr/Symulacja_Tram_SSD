@@ -17,16 +17,6 @@ Program ma zegar i listę zdarzeń ułożonych od najwcześniejszego. Przykład:
 
 Zrobiliśmy to przy pomocy `heapq`, czyli kolejki dostępnej w Pythonie.
 
-## Z czego korzystamy?
-
-- **GTFS ZTP Kraków** – linie (`routes.txt`), kursy (`trips.txt`), przystanki (`stops.txt`), godziny (`stop_times.txt`), trasy (`shapes.txt`) i daty kursowania (`calendar_dates.txt`).
-- **Python + pandas** – odczytywanie i łączenie danych.
-- **requests** – pobieranie GTFS.
-- **heapq** – kolejka zdarzeń DES.
-- **Matplotlib** – mapa i animacja.
-
-Główne pliki projektu: `gtfs.py` (dane), `simulation.py` (czas i zdarzenia), `geometry.py` (ruch po trasie), `main.py` (uruchamianie i mapa).
-
 ## Jakie były problemy?
 
 1. **Tramwaje poruszały się po prostej.** Dodaliśmy wykorzystanie `shapes.txt` i dopasowanie przystanków do trasy. Przy nieudanym dopasowaniu zostaje stara metoda.
